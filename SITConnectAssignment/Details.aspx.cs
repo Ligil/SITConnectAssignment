@@ -16,6 +16,7 @@ namespace SITConnectAssignment
 
     public partial class Details : System.Web.UI.Page
     {
+        string MYDBConnectionString = System.Configuration.ConfigurationManager.ConnectionStrings["SITConnectDB"].ConnectionString;
 
         protected void Page_Load(object sender, EventArgs e)
         {
@@ -24,7 +25,11 @@ namespace SITConnectAssignment
                 {
                     Response.Redirect("Login.aspx", false);
                 }
-                else
+                else if(DateTime.Now > getDateTime().AddMinutes(15))
+                {
+                    Response.Redirect("ChangePassword.aspx", false);
+                } 
+                else 
                 {
                     //Insert Details page codes here
                     DataSet dset = new DataSet();
@@ -84,6 +89,61 @@ namespace SITConnectAssignment
                 Response.Cookies["AuthToken"].Expires = DateTime.Now.AddMonths(-20);
             }
 
+        }
+
+        protected void ChangePasswordBtn_Click(object sender, EventArgs e)
+        {
+            if (Session["UserID"] != null && Session["AuthToken"] != null && Request.Cookies["AuthToken"] != null)
+            {
+                if (!Session["AuthToken"].ToString().Equals(Request.Cookies["AuthToken"].Value))
+                {
+                    Response.Redirect("Login.aspx", false);
+                }
+                else
+                {
+                    DateTime time = getDateTime();
+                    if (DateTime.Now > time.AddMinutes(3))
+                    {
+                        Response.Redirect("ChangePassword.aspx", false);
+                    }
+                    else
+                    {
+                        //Recently changed password, nothing happens
+                        ScriptManager.RegisterClientScriptBlock(this, this.GetType(), "alertMessage", "alert('Password Recently Changed, please wait till " + time.AddMinutes(5).ToString() + "')", true);
+                    }
+                }
+            }
+
+
+        }
+
+        public DateTime getDateTime()
+        {
+            SqlConnection connection = new SqlConnection(MYDBConnectionString);
+
+            //Retrieve current PasswordHash and Salt
+            string sql = "SELECT PasswordChangeTime FROM Account WHERE lower(Email) = @Email";
+            SqlCommand cmd = new SqlCommand(sql, connection);
+            cmd.Parameters.AddWithValue("@Email", Session["UserID"].ToString().ToLower());
+
+            DateTime PassChangeTime = DateTime.Now;
+            try
+            {
+                connection.Open();
+                using (SqlDataReader reader = cmd.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        PassChangeTime = DateTime.Parse(reader["PasswordChangeTime"].ToString());
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(ex.ToString());
+            }
+            finally { connection.Close(); }
+            return PassChangeTime;
         }
     }
 }

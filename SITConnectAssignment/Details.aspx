@@ -31,6 +31,10 @@
         <br />
         <asp:Label ID="label13" runat="server" Text="Date of Birth: "></asp:Label>
         <asp:Label ID="lbl_dob" runat="server"></asp:Label>
+    <br />
+    <br />      
+        <asp:Button ID="ChangePasswordBtn" runat="server" Text="Change Password" OnClick="ChangePasswordBtn_Click" />
+        
 
         <br />
         <br />

@@ -154,6 +154,12 @@ namespace SITConnectAssignment
                 valid = false;
                 lbl_pwdchecker.Text = "Invalid Password Input!";
                 errorList.Add("• Password value is invalid!");
+            } else if (tb_password.Text != tb_cfmPassword.Text)
+            {
+                valid = false;
+                lbl_cfmchecker.Text = "Password and Confirm Password does not match!";
+                errorList.Add("• Password and Confirm Password does not match!");
+
             }
             else { lbl_pwdchecker.Text = ""; }
 
@@ -189,7 +195,7 @@ namespace SITConnectAssignment
             {
                 using (SqlConnection con = new SqlConnection(MYDBConnectionString))
                 {
-                    using (SqlCommand cmd = new SqlCommand("INSERT INTO Account VALUES(@Firstname, @Lastname, @CCnumber, @CCexpdate, @CCcvv, @Email, @PasswordHash, @PasswordSalt, @Dateofbirth, @IV, @Key, 0)"))
+                    using (SqlCommand cmd = new SqlCommand("INSERT INTO Account VALUES(@Firstname, @Lastname, @CCnumber, @CCexpdate, @CCcvv, @Email, @PasswordHash, @PasswordSalt, @Dateofbirth, @IV, @Key, 0, getdate(), getdate())"))
                     {
                         using (SqlDataAdapter sda = new SqlDataAdapter())
                         {

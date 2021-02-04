@@ -36,21 +36,26 @@ namespace SITConnectAssignment
                 string dbSalt = getDBSalt(email);
 
                 int attempts = getDBLockoutCount(email);
+                DateTime lockoutTime = getDBLockoutTime(email);
 
-                if (attempts >= 3)
+                if (DateTime.Now > lockoutTime && attempts >= 3)
                 {
-                    lbl_errormsg.Text = "Your account has been locked out.";
+                    updateDBLockoutCount(email, 0);
                 }
-                else
+
+                try
                 {
-                    try
+                    if (dbSalt != null && dbSalt.Length > 0 && dbHash != null && dbHash.Length > 0)
                     {
-                        if (dbSalt != null && dbSalt.Length > 0 && dbHash != null && dbHash.Length > 0)
+                        string pwdWithSalt = pwd + dbSalt;
+                        byte[] hashWithSalt = hashing.ComputeHash(Encoding.UTF8.GetBytes(pwdWithSalt));
+                        string userHash = Convert.ToBase64String(hashWithSalt);
+                        if (userHash.Equals(dbHash))
                         {
-                            string pwdWithSalt = pwd + dbSalt;
-                            byte[] hashWithSalt = hashing.ComputeHash(Encoding.UTF8.GetBytes(pwdWithSalt));
-                            string userHash = Convert.ToBase64String(hashWithSalt);
-                            if (userHash.Equals(dbHash))
+                            if (DateTime.Now < lockoutTime && attempts >= 3)
+                            {
+                                lbl_errormsg.Text = "Your account has been locked out. It will be unlocked at " + lockoutTime.ToString();
+                            } else
                             {
                                 Session["UserID"] = email;
 
@@ -61,36 +66,44 @@ namespace SITConnectAssignment
 
                                 updateDBLockoutCount(email, 0);
 
-                                Response.Redirect("Details.aspx", false);
-                            }
-                            else
-                            {
-                                updateDBLockoutCount(email, attempts + 1);
-                                int remainingAttempts = 2 - attempts;
-                                if (remainingAttempts <= 0)
+                                //If over 15 minutes since last change password, force change
+                                if (DateTime.Now > getDateTime().AddMinutes(15))
                                 {
-                                    lbl_errormsg.Text = "Account has been locked out!";
-                                }
-                                else if (remainingAttempts == 1)
-                                {
-                                    lbl_errormsg.Text = "Email or password is not valid. Please try again. 1 more attempt before account lockout";
+                                    ScriptManager.RegisterClientScriptBlock(this, this.GetType(), "alertMessage", "alert('It has been 15 minutes since your last password change, please Change Password')", true);
+                                    Response.Redirect("ChangePassword.aspx", false);
                                 } else
                                 {
-                                    lbl_errormsg.Text = "Email or password is not valid. Please try again.";
+                                    Response.Redirect("Details.aspx", false);
                                 }
                             }
                         }
                         else
                         {
-                            lbl_errormsg.Text = "Email or password is not valid. Please try again.";
+                            updateDBLockoutCount(email, attempts + 1);
+                            int remainingAttempts = 2 - attempts;
+                            if (remainingAttempts <= 0)
+                            {
+                                lbl_errormsg.Text = "Account has been locked out! It will be unlocked in a minute";
+                            }
+                            else if (remainingAttempts == 1)
+                            {
+                                lbl_errormsg.Text = "Email or password is not valid. Please try again. 1 more attempt before account lockout";
+                            } else
+                            {
+                                lbl_errormsg.Text = "Email or password is not valid. Please try again.";
+                            }
                         }
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        throw new Exception(ex.ToString());
+                        lbl_errormsg.Text = "Email or password is not valid. Please try again.";
                     }
-                    finally { }
                 }
+                catch (Exception ex)
+                {
+                    throw new Exception(ex.ToString());
+                }
+                finally { }
             } else
             {
                 lbl_errormsg.Text = "Hi robot! :D";
@@ -196,13 +209,12 @@ namespace SITConnectAssignment
             return s;
         }
 
-        protected int updateDBLockoutCount(string email, int number)
+        protected DateTime getDBLockoutTime(string email)
         {
-            int s = 0;
+            DateTime s = new DateTime();
             SqlConnection connection = new SqlConnection(MYDBConnectionString);
-            string sql = "UPDATE Account SET LockoutCount=@count WHERE lower(Email)=@email";
+            string sql = "SELECT LockoutTime FROM Account WHERE lower(Email)=@email";
             SqlCommand command = new SqlCommand(sql, connection);
-            command.Parameters.AddWithValue("@count", number);
             command.Parameters.AddWithValue("@email", email.ToLower());
             try
             {
@@ -211,11 +223,11 @@ namespace SITConnectAssignment
                 {
                     while (reader.Read())
                     {
-                        if (reader["LockoutCount"] != null)
+                        if (reader["LockoutTime"] != null)
                         {
-                            if (reader["LockoutCount"] != DBNull.Value)
+                            if (reader["LockoutTime"] != DBNull.Value)
                             {
-                                s = int.Parse(reader["LockoutCount"].ToString());
+                                s = DateTime.Parse(reader["LockoutTime"].ToString());
                             }
                         }
                     }
@@ -227,6 +239,104 @@ namespace SITConnectAssignment
             }
             finally { connection.Close(); }
             return s;
+        }
+
+        public DateTime getDateTime()
+        {
+            SqlConnection connection = new SqlConnection(MYDBConnectionString);
+
+            //Retrieve current PasswordHash and Salt
+            string sql = "SELECT PasswordChangeTime FROM Account WHERE lower(Email) = @Email";
+            SqlCommand cmd = new SqlCommand(sql, connection);
+            cmd.Parameters.AddWithValue("@Email", Session["UserID"].ToString().ToLower());
+
+            DateTime PassChangeTime = DateTime.Now;
+            try
+            {
+                connection.Open();
+                using (SqlDataReader reader = cmd.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        PassChangeTime = DateTime.Parse(reader["PasswordChangeTime"].ToString());
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(ex.ToString());
+            }
+            finally { connection.Close(); }
+            return PassChangeTime;
+        }
+
+        protected int updateDBLockoutCount(string email, int number)
+        {
+            if (number >= 3)
+            {
+                int s = 0;
+                SqlConnection connection = new SqlConnection(MYDBConnectionString);
+                string sql = "UPDATE Account SET LockoutCount=@count, LockoutTime=@time WHERE lower(Email)=@email";
+                SqlCommand command = new SqlCommand(sql, connection);
+                command.Parameters.AddWithValue("@count", number);
+                command.Parameters.AddWithValue("@email", email.ToLower());
+                command.Parameters.AddWithValue("@time", DateTime.Now.AddMinutes(1));
+                try
+                {
+                    connection.Open();
+                    using (SqlDataReader reader = command.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            if (reader["LockoutCount"] != null)
+                            {
+                                if (reader["LockoutCount"] != DBNull.Value)
+                                {
+                                    s = int.Parse(reader["LockoutCount"].ToString());
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    throw new Exception(ex.ToString());
+                }
+                finally { connection.Close(); }
+                return s;
+            } else
+            {
+                int s = 0;
+                SqlConnection connection = new SqlConnection(MYDBConnectionString);
+                string sql = "UPDATE Account SET LockoutCount=@count WHERE lower(Email)=@email";
+                SqlCommand command = new SqlCommand(sql, connection);
+                command.Parameters.AddWithValue("@count", number);
+                command.Parameters.AddWithValue("@email", email.ToLower());
+                try
+                {
+                    connection.Open();
+                    using (SqlDataReader reader = command.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            if (reader["LockoutCount"] != null)
+                            {
+                                if (reader["LockoutCount"] != DBNull.Value)
+                                {
+                                    s = int.Parse(reader["LockoutCount"].ToString());
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    throw new Exception(ex.ToString());
+                }
+                finally { connection.Close(); }
+                return s;
+            }
+
         }
 
         protected void tb_password_TextChanged(object sender, EventArgs e)
