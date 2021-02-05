@@ -69,7 +69,7 @@ namespace SITConnectAssignment
                                 //If over 15 minutes since last change password, force change
                                 if (DateTime.Now > getDateTime().AddMinutes(15))
                                 {
-                                    ScriptManager.RegisterClientScriptBlock(this, this.GetType(), "alertMessage", "alert('It has been 15 minutes since your last password change, please Change Password')", true);
+                                    Session["NewPass"] = true;
                                     Response.Redirect("ChangePassword.aspx", false);
                                 } else
                                 {

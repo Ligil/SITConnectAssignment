@@ -33,6 +33,14 @@ namespace SITConnectAssignment
                 else if (DateTime.Now < getDateTime())
                 {
                     Response.Redirect("Details.aspx", false);
+                } else
+                {
+                    if (Session["NewPass"] != null)
+                    {
+                        ScriptManager.RegisterClientScriptBlock(this, this.GetType(), "alertMessage", "alert('Your account password age has exceeded 15 minutes, please change your password')", true);
+                        Session.Remove("NewPass");
+
+                    }
                 }
 
 
